@@ -29,39 +29,37 @@ const TSLanguage *tree_sitter_python(void);
 
 static bool log_initialized = false;
 
-void initLog()
-{
-    FILE* log_file = fopen(LOG_FILE, "w");
-    if (log_file) {
-        fclose(log_file);
-    }
-    log_initialized = true;
+void initLog() {
+  FILE *log_file = fopen(LOG_FILE, "w");
+  if (log_file) {
+    fclose(log_file);
+  }
+  log_initialized = true;
 }
 
-void log(const char* format, ...)
-{
-    if (!log_initialized) {
-        initLog();
-    }
+void log(const char *format, ...) {
+  if (!log_initialized) {
+    initLog();
+  }
 
-    static char string[1024] = "";
+  static char string[1024] = "";
 
-    va_list args;
-    va_start(args, format);
-    vsnprintf(string, 1024, format, args);
-    va_end(args);
+  va_list args;
+  va_start(args, format);
+  vsnprintf(string, 1024, format, args);
+  va_end(args);
 
-    FILE* log_file = fopen(LOG_FILE, "a");
-    if (!log_file) {
-        return;
-    }
-    char* token = strtok(string, "\n");
-    while (token != NULL) {
-        fprintf(log_file, "%s", token);
-        fprintf(log_file, "\n");
-        token = strtok(NULL, "\n");
-    }
-    fclose(log_file);
+  FILE *log_file = fopen(LOG_FILE, "a");
+  if (!log_file) {
+    return;
+  }
+  char *token = strtok(string, "\n");
+  while (token != NULL) {
+    fprintf(log_file, "%s", token);
+    fprintf(log_file, "\n");
+    token = strtok(NULL, "\n");
+  }
+  fclose(log_file);
 }
 
 std::map<std::string, std::function<const TSLanguage *()>> ts_languages = {
@@ -89,8 +87,7 @@ public:
 
 class Doc {
 public:
-  Doc() : tree(NULL) {
-  }
+  Doc() : tree(NULL) {}
   ~Doc() {
     if (tree) {
       ts_tree_delete(tree);
@@ -103,13 +100,14 @@ typedef std::shared_ptr<Doc> doc_ptr;
 static std::map<int, doc_ptr> docs;
 
 doc_ptr get_doc(int id) {
-    if (docs.find(id) == docs.end()) {
-      docs[id] = std::make_shared<Doc>();
-    }
-    return docs[id];
+  if (docs.find(id) == docs.end()) {
+    docs[id] = std::make_shared<Doc>();
+  }
+  return docs[id];
 }
 
-void walk_tree(TSTreeCursor *cursor, int depth, int row, std::vector<TSNodeEx> *nodes) {
+void walk_tree(TSTreeCursor *cursor, int depth, int row,
+               std::vector<TSNodeEx> *nodes) {
   TSNode node = ts_tree_cursor_current_node(cursor);
   int start = ts_node_start_byte(node);
   int end = ts_node_end_byte(node);
@@ -119,17 +117,22 @@ void walk_tree(TSTreeCursor *cursor, int depth, int row, std::vector<TSNodeEx> *
   TSPoint endPoint = ts_node_end_point(node);
 
   // if (strcmp(type, "ERROR") == 0) {
-    // nodes->clear();
-    // return;
+  // nodes->clear();
+  // return;
   // }
 
-  if (nodes != NULL) {
+  bool has_children = true;
+  if (!ts_tree_cursor_goto_first_child(cursor)) {
+    has_children = false;
+  }
+
+  if (nodes != NULL && (!has_children || startPoint.row != endPoint.row)) {
     if (row != -1 && startPoint.row == row) {
       nodes->push_back(TSNodeEx(node, depth));
     }
   }
 
-  if (!ts_tree_cursor_goto_first_child(cursor)) {
+  if (!has_children) {
     return;
   }
 
@@ -141,12 +144,12 @@ void walk_tree(TSTreeCursor *cursor, int depth, int row, std::vector<TSNodeEx> *
   } while (ts_tree_cursor_goto_next_sibling(cursor));
 }
 
-TSTree *build_tree(char *content, int content_length, char* type) {
+TSTree *build_tree(char *content, int content_length, char *type) {
   if (!type || ts_languages.find(type) == ts_languages.end()) {
     return NULL;
   }
 
-  std::string langId =type;
+  std::string langId = type;
   std::function<const TSLanguage *()> lang = ts_languages[langId];
 
   TSParser *parser = ts_parser_new();
@@ -197,8 +200,7 @@ std::vector<TSNodeEx> query_tree(TSTree *tree, int row) {
 
       log(">%s\n", ss.str().c_str());
     }
-  #endif
-
+#endif
   }
   return nodes;
 }
@@ -224,7 +226,7 @@ int _query_tree(lua_State *L) {
   if (!doc->tree) {
     return 1;
   }
-  
+
   if (doc->tree) {
     std::vector<TSNodeEx> nodes = query_tree(doc->tree, row);
     for (auto _node : nodes) {
@@ -259,7 +261,7 @@ int _parse_buffer(lua_State *L) {
   int length = lua_tonumber(L, -3);
   const char *type = lua_tostring(L, -2);
   int doc = lua_tonumber(L, -1);
-  parse_buffer(doc, (char*)content, length, (char*)type);
+  parse_buffer(doc, (char *)content, length, (char *)type);
   return 1;
 }
 
@@ -278,7 +280,8 @@ int main(int argc, char **argv) {
     std::stringstream ss;
     std::ifstream t(argv[1]);
     ss << t.rdbuf();
-    TSTree *tree = parse_buffer(0, (char *)(ss.str().c_str()), ss.str().size(), "c");
+    TSTree *tree =
+        parse_buffer(0, (char *)(ss.str().c_str()), ss.str().size(), "c");
     query_tree(tree, 76);
     ts_tree_delete(tree);
   }
