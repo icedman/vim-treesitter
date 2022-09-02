@@ -35,6 +35,11 @@ std::map<std::string, std::function<const TSLanguage *()>> ts_languages = {
 };
 ```
 
+# commands
+
+* TSDebugNodes ~ show node type at cursor
+* TSOuterBlock ~ move cursor to containing node block
+
 # warning
 
 * This plugin is just a proof of concept - from a novice lua coder, and much worse - from a novice vim user
