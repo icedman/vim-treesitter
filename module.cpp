@@ -28,6 +28,7 @@ const TSLanguage *tree_sitter_python(void);
 #define LOG_FILE "/tmp/ashlar.log"
 
 static bool log_initialized = false;
+static bool log_tree = false;
 
 void initLog() {
   FILE *log_file = fopen(LOG_FILE, "w");
@@ -77,12 +78,16 @@ std::map<std::string, std::function<const TSLanguage *()>> ts_languages = {
 
 class TSNodeEx {
 public:
-  TSNodeEx(TSNode n, int d) {
+  TSNodeEx(TSNode n, int d, char *t = NULL) {
     node = n;
     depth = d;
+    if (t) {
+      context = t;
+    }
   }
   TSNode node;
   int depth;
+  std::string context;
 };
 
 class Doc {
@@ -107,7 +112,8 @@ doc_ptr get_doc(int id) {
 }
 
 void walk_tree(TSTreeCursor *cursor, int depth, int row,
-               std::vector<TSNodeEx> *nodes) {
+               std::vector<TSNodeEx> *nodes, int option = 0,
+               char *last_type = NULL) {
   TSNode node = ts_tree_cursor_current_node(cursor);
   int start = ts_node_start_byte(node);
   int end = ts_node_end_byte(node);
@@ -126,9 +132,21 @@ void walk_tree(TSTreeCursor *cursor, int depth, int row,
     has_children = false;
   }
 
-  if (nodes != NULL && (!has_children || startPoint.row != endPoint.row)) {
-    if (row != -1 && startPoint.row == row) {
-      nodes->push_back(TSNodeEx(node, depth));
+  if (nodes != NULL && row != -1) {
+    // find specific row ~ option 0
+    if (nodes != NULL && option == 0 &&
+        (!has_children || startPoint.row != endPoint.row)) {
+      if (startPoint.row == row) {
+        nodes->push_back(TSNodeEx(node, depth, last_type));
+      }
+    }
+
+    // find block section ~ option 1
+    if (nodes != NULL && option == 1 &&
+        (has_children && startPoint.row != endPoint.row)) {
+      if (startPoint.row < row && endPoint.row > row) {
+        nodes->push_back(TSNodeEx(node, depth, last_type));
+      }
     }
   }
 
@@ -139,7 +157,7 @@ void walk_tree(TSTreeCursor *cursor, int depth, int row,
   do {
     TSTreeCursor child_cursor =
         ts_tree_cursor_new(ts_tree_cursor_current_node(cursor));
-    walk_tree(&child_cursor, depth + 1, row, nodes);
+    walk_tree(&child_cursor, depth + 1, row, nodes, option, (char *)type);
     ts_tree_cursor_delete(&child_cursor);
   } while (ts_tree_cursor_goto_next_sibling(cursor));
 }
@@ -167,40 +185,44 @@ TSTree *build_tree(char *content, int content_length, char *type) {
   return tree;
 }
 
-std::vector<TSNodeEx> query_tree(TSTree *tree, int row) {
+void dump_nodes(std::vector<TSNodeEx> nodes) {
+  for (auto _node : nodes) {
+    TSNode node = _node.node;
+    const char *type = ts_node_type(node);
+    TSPoint start = ts_node_start_point(node);
+    TSPoint end = ts_node_end_point(node);
+
+    std::stringstream ss;
+    for (int i = 0; i < _node.depth; i++) {
+      ss << " ";
+    }
+    ss << start.row;
+    ss << ",";
+    ss << start.column;
+    ss << "-";
+    ss << end.row;
+    ss << ",";
+    ss << end.column;
+    ss << " ";
+    ss << type;
+
+    log(">%s\n", ss.str().c_str());
+  }
+}
+
+std::vector<TSNodeEx> query_tree(TSTree *tree, int row, int option = 0) {
   std::vector<TSNodeEx> nodes;
 
   if (tree) {
     TSNode root_node = ts_tree_root_node(tree);
 
     TSTreeCursor cursor = ts_tree_cursor_new(root_node);
-    walk_tree(&cursor, 0, row, &nodes);
+    walk_tree(&cursor, 0, row, &nodes, option);
     ts_tree_cursor_delete(&cursor);
+  }
 
-#if 0
-    for (auto _node : nodes) {
-      TSNode node = _node.node;
-      const char *type = ts_node_type(node);
-      TSPoint start = ts_node_start_point(node);
-      TSPoint end = ts_node_end_point(node);
-
-      std::stringstream ss;
-      for (int i = 0; i < _node.depth; i++) {
-        ss << " ";
-      }
-      ss << start.row;
-      ss << ",";
-      ss << start.column;
-      ss << "-";
-      ss << end.row;
-      ss << ",";
-      ss << end.column;
-      ss << " ";
-      ss << type;
-
-      log(">%s\n", ss.str().c_str());
-    }
-#endif
+  if (log_tree) {
+    dump_nodes(nodes);
   }
   return nodes;
 }
@@ -216,8 +238,9 @@ TSTree *parse_buffer(int id, char *content, int content_length, char *type) {
 }
 
 int _query_tree(lua_State *L) {
-  int id = lua_tonumber(L, -2);
-  int row = lua_tonumber(L, -1);
+  int id = lua_tonumber(L, -3);
+  int row = lua_tonumber(L, -2);
+  int option = lua_tonumber(L, -1);
 
   lua_newtable(L);
   int idx = 1;
@@ -228,13 +251,19 @@ int _query_tree(lua_State *L) {
   }
 
   if (doc->tree) {
-    std::vector<TSNodeEx> nodes = query_tree(doc->tree, row);
+    std::vector<TSNodeEx> nodes = query_tree(doc->tree, row, option);
     for (auto _node : nodes) {
 
       TSNode node = _node.node;
       const char *type = ts_node_type(node);
       TSPoint start = ts_node_start_point(node);
       TSPoint end = ts_node_end_point(node);
+
+      std::string _t = _node.context;
+      if (_t.size() > 0) {
+        _t = _t + ".";
+      }
+      _t = _t + type;
 
       int col = 1;
       lua_newtable(L);
@@ -246,7 +275,7 @@ int _query_tree(lua_State *L) {
       lua_rawseti(L, -2, col++);
       lua_pushnumber(L, end.column);
       lua_rawseti(L, -2, col++);
-      lua_pushstring(L, type);
+      lua_pushstring(L, _t.c_str());
       lua_rawseti(L, -2, col++);
 
       lua_rawseti(L, -2, idx++);
@@ -265,12 +294,19 @@ int _parse_buffer(lua_State *L) {
   return 1;
 }
 
+int _log_tree(lua_State *L) {
+  log_tree = true;
+  return 1;
+}
+
 EXPORT int luaopen_treesitter(lua_State *L) {
   lua_newtable(L);
   lua_pushcfunction(L, _parse_buffer);
   lua_setfield(L, -2, "parse_buffer");
   lua_pushcfunction(L, _query_tree);
   lua_setfield(L, -2, "query_tree");
+  lua_pushcfunction(L, _log_tree);
+  lua_setfield(L, -2, "log_tree");
   return 1;
 }
 
