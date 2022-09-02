@@ -1,5 +1,7 @@
 extern "C" {
 
+#include <lua.h>
+
 #include <tree_sitter/api.h>
 const TSLanguage *tree_sitter_c(void);
 const TSLanguage *tree_sitter_cpp(void);
@@ -12,25 +14,67 @@ const TSLanguage *tree_sitter_json(void);
 const TSLanguage *tree_sitter_python(void);
 }
 
+#define EXPORT                                                                 \
+  extern "C" __attribute__((visibility("default"))) __attribute__((used))
+
 #include <cstring>
+#include <fstream>
 #include <functional>
 #include <map>
-#include <fstream>
+#include <memory>
 #include <sstream>
 #include <string>
 
+#define LOG_FILE "/tmp/ashlar.log"
+
+static bool log_initialized = false;
+
+void initLog()
+{
+    FILE* log_file = fopen(LOG_FILE, "w");
+    if (log_file) {
+        fclose(log_file);
+    }
+    log_initialized = true;
+}
+
+void log(const char* format, ...)
+{
+    if (!log_initialized) {
+        initLog();
+    }
+
+    static char string[1024] = "";
+
+    va_list args;
+    va_start(args, format);
+    vsnprintf(string, 1024, format, args);
+    va_end(args);
+
+    FILE* log_file = fopen(LOG_FILE, "a");
+    if (!log_file) {
+        return;
+    }
+    char* token = strtok(string, "\n");
+    while (token != NULL) {
+        fprintf(log_file, "%s", token);
+        fprintf(log_file, "\n");
+        token = strtok(NULL, "\n");
+    }
+    fclose(log_file);
+}
+
 std::map<std::string, std::function<const TSLanguage *()>> ts_languages = {
-    {"c", tree_sitter_c},
-    {"cpp", tree_sitter_cpp},
-    {"csharp", tree_sitter_c_sharp},
-    {"css", tree_sitter_css},
-    {"html", tree_sitter_html},
-    {"xml", tree_sitter_html},
-    {"java", tree_sitter_java},
-    {"javascript", tree_sitter_javascript},
-    {"js", tree_sitter_javascript},
-    {"json", tree_sitter_json},
-    {"python", tree_sitter_python},
+    {".c", tree_sitter_c},
+    {".cpp", tree_sitter_cpp},
+    {".csharp", tree_sitter_c_sharp},
+    {".css", tree_sitter_css},
+    {".html", tree_sitter_html},
+    {".xml", tree_sitter_html},
+    {".java", tree_sitter_java},
+    {".js", tree_sitter_javascript},
+    {".json", tree_sitter_json},
+    {".py", tree_sitter_python},
 };
 
 class TSNodeEx {
@@ -43,7 +87,29 @@ public:
   int depth;
 };
 
-void walk_tree(TSTreeCursor *cursor, int depth, std::vector<TSNodeEx> *nodes) {
+class Doc {
+public:
+  Doc() : tree(NULL) {
+  }
+  ~Doc() {
+    if (tree) {
+      ts_tree_delete(tree);
+    }
+  }
+  TSTree *tree;
+};
+
+typedef std::shared_ptr<Doc> doc_ptr;
+static std::map<int, doc_ptr> docs;
+
+doc_ptr get_doc(int id) {
+    if (docs.find(id) == docs.end()) {
+      docs[id] = std::make_shared<Doc>();
+    }
+    return docs[id];
+}
+
+void walk_tree(TSTreeCursor *cursor, int depth, int row, std::vector<TSNodeEx> *nodes) {
   TSNode node = ts_tree_cursor_current_node(cursor);
   int start = ts_node_start_byte(node);
   int end = ts_node_end_byte(node);
@@ -52,13 +118,15 @@ void walk_tree(TSTreeCursor *cursor, int depth, std::vector<TSNodeEx> *nodes) {
   TSPoint startPoint = ts_node_start_point(node);
   TSPoint endPoint = ts_node_end_point(node);
 
-  if (strcmp(type, "ERROR") == 0) {
-    nodes->clear();
-    return;
-  }
+  // if (strcmp(type, "ERROR") == 0) {
+    // nodes->clear();
+    // return;
+  // }
 
   if (nodes != NULL) {
-    nodes->push_back(TSNodeEx(node, depth));
+    if (row != -1 && startPoint.row == row) {
+      nodes->push_back(TSNodeEx(node, depth));
+    }
   }
 
   if (!ts_tree_cursor_goto_first_child(cursor)) {
@@ -68,44 +136,45 @@ void walk_tree(TSTreeCursor *cursor, int depth, std::vector<TSNodeEx> *nodes) {
   do {
     TSTreeCursor child_cursor =
         ts_tree_cursor_new(ts_tree_cursor_current_node(cursor));
-    walk_tree(&child_cursor, depth + 1, nodes);
+    walk_tree(&child_cursor, depth + 1, row, nodes);
     ts_tree_cursor_delete(&child_cursor);
   } while (ts_tree_cursor_goto_next_sibling(cursor));
 }
 
-void build_tree(char *path) {
-  std::string langId = "cpp";
+TSTree *build_tree(char *content, int content_length, char* type) {
+  if (!type || ts_languages.find(type) == ts_languages.end()) {
+    return NULL;
+  }
+
+  std::string langId =type;
   std::function<const TSLanguage *()> lang = ts_languages[langId];
 
   TSParser *parser = ts_parser_new();
   if (!ts_parser_set_language(parser, lang())) {
-    printf("Invalid language\n");
-    return;
+    log("invalid language\n");
+    return NULL;
+  } else {
+    // log("language: %s", type);
   }
 
-  // std::stringstream ss;
-  // ss << "#include <stdio.h>\n";
-  // ss << "int main(int argc, char** argv) {\n";
-  // ss << "   return 0;\n";
-  // ss << "}";
+  TSTree *tree = ts_parser_parse_string(parser, NULL /* TODO: old_tree */,
+                                        content, content_length);
 
-  std::stringstream ss;
-  std::ifstream t(path);
-  ss << t.rdbuf();
+  ts_parser_delete(parser);
+  return tree;
+}
 
-  TSTree *tree =
-      ts_parser_parse_string(parser, NULL /* TODO: old_tree */,
-                             (char *)(ss.str().c_str()), ss.str().size());
-
+std::vector<TSNodeEx> query_tree(TSTree *tree, int row) {
   std::vector<TSNodeEx> nodes;
 
   if (tree) {
     TSNode root_node = ts_tree_root_node(tree);
 
     TSTreeCursor cursor = ts_tree_cursor_new(root_node);
-    walk_tree(&cursor, 0, &nodes);
+    walk_tree(&cursor, 0, row, &nodes);
     ts_tree_cursor_delete(&cursor);
 
+#if 0
     for (auto _node : nodes) {
       TSNode node = _node.node;
       const char *type = ts_node_type(node);
@@ -113,7 +182,7 @@ void build_tree(char *path) {
       TSPoint end = ts_node_end_point(node);
 
       std::stringstream ss;
-      for(int i=0; i<_node.depth; i++) {
+      for (int i = 0; i < _node.depth; i++) {
         ss << " ";
       }
       ss << start.row;
@@ -126,17 +195,102 @@ void build_tree(char *path) {
       ss << " ";
       ss << type;
 
-      printf("%s\n", ss.str().c_str());
+      log(">%s\n", ss.str().c_str());
     }
+  #endif
 
-    ts_tree_delete(tree);
   }
-  ts_parser_delete(parser);
+  return nodes;
 }
 
+TSTree *parse_buffer(int id, char *content, int content_length, char *type) {
+  doc_ptr doc = get_doc(id);
+  if (doc->tree) {
+    ts_tree_delete(doc->tree);
+  }
+
+  doc->tree = build_tree(content, content_length, type);
+  return doc->tree;
+}
+
+int _query_tree(lua_State *L) {
+  int id = lua_tonumber(L, -2);
+  int row = lua_tonumber(L, -1);
+
+  lua_newtable(L);
+  int idx = 1;
+
+  doc_ptr doc = get_doc(id);
+  if (!doc->tree) {
+    return 1;
+  }
+  
+  if (doc->tree) {
+    std::vector<TSNodeEx> nodes = query_tree(doc->tree, row);
+    for (auto _node : nodes) {
+
+      TSNode node = _node.node;
+      const char *type = ts_node_type(node);
+      TSPoint start = ts_node_start_point(node);
+      TSPoint end = ts_node_end_point(node);
+
+      int col = 1;
+      lua_newtable(L);
+      lua_pushnumber(L, start.row);
+      lua_rawseti(L, -2, col++);
+      lua_pushnumber(L, start.column);
+      lua_rawseti(L, -2, col++);
+      lua_pushnumber(L, end.row);
+      lua_rawseti(L, -2, col++);
+      lua_pushnumber(L, end.column);
+      lua_rawseti(L, -2, col++);
+      lua_pushstring(L, type);
+      lua_rawseti(L, -2, col++);
+
+      lua_rawseti(L, -2, idx++);
+    }
+  }
+
+  return 1;
+}
+
+int _parse_buffer(lua_State *L) {
+  const char *content = lua_tostring(L, -4);
+  int length = lua_tonumber(L, -3);
+  const char *type = lua_tostring(L, -2);
+  int doc = lua_tonumber(L, -1);
+  parse_buffer(doc, (char*)content, length, (char*)type);
+  return 1;
+}
+
+EXPORT int luaopen_treesitter(lua_State *L) {
+  lua_newtable(L);
+  lua_pushcfunction(L, _parse_buffer);
+  lua_setfield(L, -2, "parse_buffer");
+  lua_pushcfunction(L, _query_tree);
+  lua_setfield(L, -2, "query_tree");
+  return 1;
+}
+
+#ifdef HAVE_MAIN
 int main(int argc, char **argv) {
   if (argc == 2) {
-    build_tree(argv[1]);
+    std::stringstream ss;
+    std::ifstream t(argv[1]);
+    ss << t.rdbuf();
+    TSTree *tree = parse_buffer(0, (char *)(ss.str().c_str()), ss.str().size(), "c");
+    query_tree(tree, 76);
+    ts_tree_delete(tree);
   }
   return 0;
 }
+
+// 76,2-76,11 expression_statement
+//  76,2-76,10 call_expression
+//   76,2-76,8 identifier
+//   76,8-76,10 argument_list
+//    76,8-76,9 (
+//    76,9-76,10 )
+//  76,10-76,11 ;
+
+#endif

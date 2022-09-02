@@ -46,11 +46,30 @@ tree_sitter_grammar_files += 'libs/tree-sitter-grammars/tree-sitter-json/src/par
 tree_sitter_grammar_files += 'libs/tree-sitter-grammars/tree-sitter-python/src/parser.c'
 tree_sitter_grammar_files += 'libs/tree-sitter-grammars/tree-sitter-python/src/scanner.cc'
 
+lua_dep = dependency('lua', required: false, disabler: true)
+
 executable('vim-treesitter',
     'module.cpp',
     tree_sitter_files,
     tree_sitter_grammar_files,
     include_directories: [
         tree_sitter_includes
-    ]
+    ],
+    dependencies: [
+        lua_dep
+    ],
+    cpp_args: '-DHAVE_MAIN=1',
+)
+
+library('treesitter',
+    'module.cpp',
+    tree_sitter_files,
+    tree_sitter_grammar_files,
+    include_directories: [
+        tree_sitter_includes
+    ],
+    dependencies: [
+        lua_dep
+    ],
+    name_prefix: ''
 )
