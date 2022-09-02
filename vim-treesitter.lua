@@ -4,22 +4,26 @@ local module = require("treesitter")
 
 package.cpath = cpath
 
+local debug_nodes = false
 local props = {}
 local _buffers = {}
 
 local scope_hl_map = {
+	{ "expression", "Operator" },
 	{ "identifier", "Identifier" },
+	{ "template", "Boolean" },
+	{ "qualified", "StorageClass" },
+	{ "descriptor", "StorageClass" },
 	{ "primitive", "StorageClass" },
-	{ "string", "String" },
-	{ "number", "Number" },
 	{ "include", "Include" },
 	{ "define", "Define" },
 	{ "preproc", "PreProc" },
 	{ "struct", "Structure" },
 	{ "return", "Keyword" },
-	{ "expression", "Operator" },
 	{ "call", "Function" },
 	{ "comment", "Comment" },
+	{ "string", "String" },
+	{ "number", "Number" },
 }
 
 local function buffers(id)
@@ -107,7 +111,7 @@ function ts_parse_buffer()
 				)
 			end
 
-			if start_row ~= end_row and i + 1 == r and start_column + 1 == c then
+			if debug_nodes and start_row ~= end_row and i + 1 == r and start_column + 1 == c then
 				print(
 					ls + start_row + 1
 						.. ","
@@ -169,9 +173,18 @@ function ts_log_tree()
 	module.log_tree()
 end
 
+function ts_debug_nodes()
+	if debug_nodes then
+		debug_nodes = false
+	else
+		debug_nodes = true
+	end
+end
+
 vim.command("au BufEnter * :lua ts_parse_buffer()")
 vim.command("au CursorMoved,CursorMovedI * :lua ts_parse_buffer()")
 vim.command("au TextChanged,TextChangedI * :lua ts_parse_buffer()")
-vim.command("command TSInnerBlock 0 % :lua ts_inner_block()")
+-- vim.command("command TSInnerBlock 0 % :lua ts_inner_block()")
 vim.command("command TSOuterBlock 0 % :lua ts_outer_block()")
 vim.command("command TSLogTree 0 % :lua ts_log_tree()")
+vim.command("command TSDebugNodes 0 % :lua ts_debug_nodes()")
