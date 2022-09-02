@@ -1,5 +1,6 @@
 local cpath = package.cpath
-package.cpath = cpath .. ";" .. vim.fn.expand("~/Developer/Projects/vim-treesitter/build/?.so")
+package.cpath = cpath .. ";" .. vim.fn.expand("~/.vim/lua/vim-treesitter/?.so")
+
 local module = require("treesitter")
 
 package.cpath = cpath
@@ -16,6 +17,7 @@ local scope_hl_map = {
 	{ "descriptor", "StorageClass" },
 	{ "primitive", "StorageClass" },
 	{ "include", "Include" },
+	{ "import", "Include" },
 	{ "define", "Define" },
 	{ "preproc", "PreProc" },
 	{ "struct", "Structure" },
@@ -24,6 +26,9 @@ local scope_hl_map = {
 	{ "comment", "Comment" },
 	{ "string", "String" },
 	{ "number", "Number" },
+	{ "tag", "StorageClass" },
+	{ "attribute", "Boolean" },
+	{ "value", "String" },
 }
 
 local function buffers(id)
@@ -82,7 +87,7 @@ function ts_parse_buffer()
 			local end_column = math.floor(node[4])
 			local node_type = node[5]
 
-			if i + 1 == r and start_column + 1 < c and end_column > c then
+			if debug_nodes and i + 1 == r and start_column + 1 < c and end_column > c then
 				print(node_type)
 			end
 
@@ -130,42 +135,49 @@ function ts_parse_buffer()
 	-- vim.command"q"
 end
 
-function ts_inner_block()
-	-- local buf = vim.buffer()
-	-- local n = buf.number
-
-	-- local r = vim.window().line
-	-- local c = vim.window().column
-end
-
-function ts_outer_block()
+function ts_block(r)
 	local buf = vim.buffer()
 	local n = buf.number
 
-	local r = vim.window().line
-	local c = vim.window().column
-
 	local b = buffers(n)
 	local ls = b.last_start
-	local nodes = module.query_tree(n, r - ls, 1)
+	local nodes = module.query_tree(n, r - ls - 1, 1)
 
-	for j, node in ipairs(nodes) do
+	if #nodes > 1 then
+		local node = nodes[#nodes]
 		local start_row = math.floor(node[1])
 		local start_column = math.floor(node[2])
 		local end_row = math.floor(node[3])
 		local end_column = math.floor(node[4])
 		local node_type = node[5]
-		print(
-			ls + start_row + 1
-				.. ","
-				.. start_column + 1
-				.. " - "
-				.. ls + end_row + 1
-				.. ","
-				.. end_column
-				.. " "
-				.. node_type
-		)
+		return { ls + start_row + 1, ls + end_row + 1 }
+	end
+end
+
+function ts_outer_block()
+	local res = ts_block(vim.window().line)
+	if res then
+		vim.command(":" .. res[1])
+	end
+end
+
+function ts_inner_block()
+	local r = vim.window().line
+	local res = ts_block(r)
+	if not res then
+		return
+	end
+
+	local current = res[1]
+	for i = res[1], res[2], 1 do
+		local res2 = ts_block(i + 1)
+		if not res[2] then
+			return
+		end
+		if res2[1] ~= current then
+			vim.command(":" .. res2[1])
+			return
+		end
 	end
 end
 
@@ -184,7 +196,10 @@ end
 vim.command("au BufEnter * :lua ts_parse_buffer()")
 vim.command("au CursorMoved,CursorMovedI * :lua ts_parse_buffer()")
 vim.command("au TextChanged,TextChangedI * :lua ts_parse_buffer()")
--- vim.command("command TSInnerBlock 0 % :lua ts_inner_block()")
-vim.command("command TSOuterBlock 0 % :lua ts_outer_block()")
 vim.command("command TSLogTree 0 % :lua ts_log_tree()")
 vim.command("command TSDebugNodes 0 % :lua ts_debug_nodes()")
+
+vim.command("command TSOuterBlock 0 % :lua ts_outer_block()")
+vim.command("noremap grn :TSOuterBlock<CR>")
+vim.command("command TSInnerBlock 0 % :lua ts_inner_block()")
+vim.command("noremap grm :TSInnerBlock<CR>")
