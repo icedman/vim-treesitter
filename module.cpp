@@ -12,6 +12,7 @@ const TSLanguage *tree_sitter_java(void);
 const TSLanguage *tree_sitter_javascript(void);
 const TSLanguage *tree_sitter_json(void);
 const TSLanguage *tree_sitter_python(void);
+const TSLanguage *tree_sitter_ruby(void);
 }
 
 #define EXPORT                                                                 \
@@ -77,6 +78,7 @@ std::map<std::string, std::function<const TSLanguage *()>> ts_languages = {
     {".jsx", tree_sitter_javascript},
     {".json", tree_sitter_json},
     {".py", tree_sitter_python},
+    {".rb", tree_sitter_ruby},
 };
 
 class TSNodeEx {

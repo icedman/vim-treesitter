@@ -1,5 +1,5 @@
 local cpath = package.cpath
-package.cpath = cpath .. ";" .. vim.fn.expand("~/.vim/lua/vim-treesitter/?.so")
+package.cpath = cpath .. ";" .. vim.fn.expand("~/.vim/lua/vim-treesitter/?.so") .. ";" .. vim.fn.expand("~/.vim/lua/vim-treesitter/?.dylib")
 
 local module = require("treesitter")
 
