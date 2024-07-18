@@ -2,8 +2,8 @@
   path = libs/tree-sitter
   url = https://github.com/tree-sitter/tree-sitter.git
 [submodule "libs/tree-sitter-grammars/tree-sitter-c"]
-  path = libs/tree-sitter-grammars/tree-sitter-c
-  url = https://github.com/tree-sitter/tree-sitter-c
+	path = libs/tree-sitter-grammars/tree-sitter-c
+	url = https://github.com/tree-sitter/tree-sitter-c
 [submodule "libs/tree-sitter-grammars/tree-sitter-css"]
   path = libs/tree-sitter-grammars/tree-sitter-css
   url = https://github.com/tree-sitter/tree-sitter-css
