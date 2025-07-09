@@ -3,6 +3,7 @@ all: prebuild build install
 .PHONY: prebuild build install
 
 prebuild:
+	git submodule update
 	meson build
 
 build:
