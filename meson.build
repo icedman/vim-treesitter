@@ -21,7 +21,8 @@ tree_sitter_files = [
     'libs/tree-sitter/lib/src/stack.c',
     'libs/tree-sitter/lib/src/subtree.c',
     'libs/tree-sitter/lib/src/tree.c',
-    'libs/tree-sitter/lib/src/tree_cursor.c'
+    'libs/tree-sitter/lib/src/tree_cursor.c',
+    'libs/tree-sitter/lib/src/wasm_store.c'
 ]
 
 tree_sitter_includes = [
@@ -32,19 +33,19 @@ tree_sitter_grammar_files = []
 
 tree_sitter_grammar_files += 'libs/tree-sitter-grammars/tree-sitter-c/src/parser.c'
 tree_sitter_grammar_files += 'libs/tree-sitter-grammars/tree-sitter-cpp/src/parser.c'
-tree_sitter_grammar_files += 'libs/tree-sitter-grammars/tree-sitter-cpp/src/scanner.cc'
+tree_sitter_grammar_files += 'libs/tree-sitter-grammars/tree-sitter-cpp/src/scanner.c'
 tree_sitter_grammar_files += 'libs/tree-sitter-grammars/tree-sitter-c-sharp/src/parser.c'
 tree_sitter_grammar_files += 'libs/tree-sitter-grammars/tree-sitter-c-sharp/src/scanner.c'
 tree_sitter_grammar_files += 'libs/tree-sitter-grammars/tree-sitter-css/src/parser.c'
 tree_sitter_grammar_files += 'libs/tree-sitter-grammars/tree-sitter-css/src/scanner.c'
 tree_sitter_grammar_files += 'libs/tree-sitter-grammars/tree-sitter-html/src/parser.c'
-tree_sitter_grammar_files += 'libs/tree-sitter-grammars/tree-sitter-html/src/scanner.cc'
+tree_sitter_grammar_files += 'libs/tree-sitter-grammars/tree-sitter-html/src/scanner.c'
 tree_sitter_grammar_files += 'libs/tree-sitter-grammars/tree-sitter-java/src/parser.c'
 tree_sitter_grammar_files += 'libs/tree-sitter-grammars/tree-sitter-javascript/src/parser.c'
 tree_sitter_grammar_files += 'libs/tree-sitter-grammars/tree-sitter-javascript/src/scanner.c'
 tree_sitter_grammar_files += 'libs/tree-sitter-grammars/tree-sitter-json/src/parser.c'
 tree_sitter_grammar_files += 'libs/tree-sitter-grammars/tree-sitter-python/src/parser.c'
-tree_sitter_grammar_files += 'libs/tree-sitter-grammars/tree-sitter-python/src/scanner.cc'
+tree_sitter_grammar_files += 'libs/tree-sitter-grammars/tree-sitter-python/src/scanner.c'
 
 lua_dep = dependency('lua', required: false, disabler: true)
 

@@ -15,6 +15,18 @@ make
 luafile ~/.vim/lua/vim-treesitter/vim-treesitter.lua
 ```
 
+```sh
+git clone https://github.com/tree-sitter/tree-sitter-c
+git clone https://github.com/tree-sitter/tree-sitter-cpp
+git clone https://github.com/tree-sitter/tree-sitter-c-sharp
+git clone https://github.com/tree-sitter/tree-sitter-css
+git clone https://github.com/tree-sitter/tree-sitter-html
+git clone https://github.com/tree-sitter/tree-sitter-java
+git clone https://github.com/tree-sitter/tree-sitter-javascript
+git clone https://github.com/tree-sitter/tree-sitter-json
+git clone https://github.com/tree-sitter/tree-sitter-python
+```
+
 # built-in parsers
 
 ```cpp
