@@ -6,7 +6,6 @@ A treesitter-based syntax highlighter for vim
 ```sh
 make
 ```
-
 make calls ```git submodule update```
 
 *.vimrc*
